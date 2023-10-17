@@ -1,0 +1,113 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: EC2 Image Builder resources
+Parameters:
+  AssetsBucket:
+    Type: String
+  VpcId:
+    Type: String
+  SubnetId:
+    Type: String
+
+
+Resources:
+  SegmenterSoftwareComponent20231017:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      ChangeDescription: first version
+      Description: install LangSAM
+      Name: langsam
+      Platform: Linux
+      Uri: !Sub s3://${AssetsBucket}/ib/components/langsam-20231017.yml
+      Version: 2023.10.17
+
+
+  SegmenterImageRecipe20231017:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      Components:
+        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux/1.0.2
+        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/aws-codedeploy-agent-linux/1.0.3
+        - ComponentArn: !Ref SegmenterSoftwareComponent20231017
+      Description: Image recipe for Meta SAM processor
+      Name: segmenter
+      ParentImage: ami-0165d99481461d0b1
+      Version: 2023.10.17
+      WorkingDirectory: /home/ec2-user
+
+
+  ImageBuilderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Effect: Allow
+          Principal:
+            Service:
+              - ec2.amazonaws.com
+          Action:
+            - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/EC2InstanceProfileForImageBuilder
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Path: "/"
+
+
+  ImageBuilderInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: ImageBuilderProfileInstance
+      Path: "/"
+      Roles:
+        - !Ref ImageBuilderRole
+
+
+  ImageBuilderSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access to Image Builder instance
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+
+
+  GpuInfrastructureConfiguration:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      Description: Infrastructure configuration for the Meta SAM processor
+      InstanceProfileName: !Ref ImageBuilderInstanceProfile
+      InstanceTypes:
+        - g5.xlarge
+      Name: segmenter
+      SecurityGroupIds:
+        - !Ref ImageBuilderSecurityGroup
+      SubnetId: !Ref SubnetId
+
+
+  SegmenterImagePipeline:
+    Type: AWS::ImageBuilder::ImagePipeline
+    Properties:
+      Description: Image pipeline for the Meta SAM processor
+      Name: segmenter
+      ImageRecipeArn: !Ref SegmenterImageRecipe20231017
+      InfrastructureConfigurationArn: !Ref GpuInfrastructureConfiguration
+      DistributionConfigurationArn: !Ref DistributionConfiguration
+
+
+  DistributionConfiguration:
+    Type: AWS::ImageBuilder::DistributionConfiguration
+    Properties:
+      Name: segmenter
+      Distributions:
+        - AmiDistributionConfiguration:
+            Name: !Sub "Segmenter - {{ imagebuilder:buildDate }}"
+            LaunchPermissionConfiguration:
+              OrganizationalUnitArns:
+                - arn:aws:organizations::159832336530:ou/o-lft6di38tr/ou-6qak-ho29g1bi
+                - arn:aws:organizations::159832336530:ou/o-lft6di38tr/ou-6qak-5l0ujndp
+              UserIds:
+                - !Ref AWS::AccountId
+          Region: !Ref AWS::Region

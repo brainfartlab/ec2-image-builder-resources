@@ -1,0 +1,28 @@
+name: install-langsam
+description: Install LangSAM
+schemaVersion: 1
+phases:
+  - name: build
+    steps:
+    - name: InstallSAM
+      action: ExecuteBash
+      inputs:
+        commands:
+          - source activate pytorch
+          - pip install git+https://github.com/facebookresearch/segment-anything.git
+          - pip install git+https://github.com/luca-medeiros/lang-segment-anything.git
+          - python -c 'from lang_sam import LangSAM;LangSAM()'
+  - name: validate
+    steps:
+    - name: Dud
+      action: ExecuteBash
+      inputs:
+        commands:
+          - echo 'validating...'
+  - name: test
+    steps:
+    - name: Dud
+      action: ExecuteBash
+      inputs:
+        commands:
+          - echo 'testing ...'

@@ -1,0 +1,5 @@
+# Vim files
+*.swp
+
+# CFN files
+packaged.yml
